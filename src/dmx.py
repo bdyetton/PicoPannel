@@ -200,12 +200,12 @@ class DMX_RX:
         
         self._dma = dma.DmaChannel(dmachannel)
         self._dma.NoReadIncr()
-        self._dma.SetTREQ(dma.TREQ_PIO4_RX)
+        self._dma.SetTREQ(dma.TREQ_PIO1_RX)
         #self._dma.SetTREQ(12) # TODO - hard coded as PIO4 TX for the moment
 
 
     def start(self):
-        self._dma.SetChannelData(0x50300023, addressof(self.channels), len(self.channels), True) # TODO Hard coded as PIO4 RX +3 (LSB byte without shifting)
+        self._dma.SetChannelData(0x50200027, addressof(self.channels), len(self.channels), True) # TODO Hard coded as PIO4 RX +3 (LSB byte without shifting)
         self._sm.restart()
         self._sm.put(len(self.channels)-1)    # Set the length of the DMX frame we expect
         self._sm.active(1)
@@ -234,7 +234,7 @@ class DMX_RX:
             if chan == 0:
                 result = f"Start code: {self.channels[chan]}"  # The start code ("channel zero") is formatted differently
             else:
-                result += f" {self.channels[chan]:3}"
+                result += f"{self.channels[chan]:3}"
             
             if chan % 100 == 0:                                # Blank line every 100 channels
                 result += "\n"
@@ -243,7 +243,8 @@ class DMX_RX:
         return result
     
     def IRQ_from_PIO(self, sm):
-        self._dma.SetChannelData(0x50300023, addressof(self.channels), len(self.channels), True) # TODO Hard coded as PIO4 RX
+        # When a byte of data is received, use DMA copy into a memory mapped channel variable
+        self._dma.SetChannelData(0x50200027, addressof(self.channels), len(self.channels), True) # TODO Hard coded as PIO4 RX
         self.frames_received += 1
 
 def test():
