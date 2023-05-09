@@ -1,5 +1,5 @@
 import rp2                            # type: ignore
-from machine import Pin, Timer        # type: ignore 
+from machine import Pin, Timer        # type: ignore
 
 from uctypes import addressof         # type: ignore
 
@@ -200,12 +200,11 @@ class DMX_RX:
         
         self._dma = dma.DmaChannel(dmachannel)
         self._dma.NoReadIncr()
-        self._dma.SetTREQ(dma.TREQ_PIO1_RX)
-        #self._dma.SetTREQ(12) # TODO - hard coded as PIO4 TX for the moment
+        self._dma.SetTREQ(dma.TREQ_PIO1_RX) # TODO hard coded as PIO1 RX for now
 
 
     def start(self):
-        self._dma.SetChannelData(0x50200027, addressof(self.channels), len(self.channels), True) # TODO Hard coded as PIO4 RX +3 (LSB byte without shifting)
+        self._dma.SetChannelData(0x50200027, addressof(self.channels), len(self.channels), True) # TODO Hard coded as PIO1 RX +3 (LSB byte without shifting)
         self._sm.restart()
         self._sm.put(len(self.channels)-1)    # Set the length of the DMX frame we expect
         self._sm.active(1)
@@ -244,59 +243,30 @@ class DMX_RX:
     
     def IRQ_from_PIO(self, sm):
         # When a byte of data is received, use DMA copy into a memory mapped channel variable
-        self._dma.SetChannelData(0x50200027, addressof(self.channels), len(self.channels), True) # TODO Hard coded as PIO4 RX
+        self._dma.SetChannelData(0x50200027, addressof(self.channels), len(self.channels), True) # TODO Hard coded as PIO1 RX
         self.frames_received += 1
 
-def test():
-    from time import sleep_ms
 
-    dmx_out = DMX_TX(3)
-    dmx_out.start()
+def test_rx():
+    """Test DMX data can be received by the pico"""
+    # Initialise the DMX receiver
+    dmx_start = 0
 
-    dmx_out.channels[1]   = 85
-    dmx_out.channels[2]   = 0b0111_1111 # Should be L4us  H28us L4us  H8us
-    dmx_out.channels[3]   = 0b0011_1110 # Should be L8us  H20us L8us  H8us
-    dmx_out.channels[4]   = 0b0001_1100 # Should be L12us H12us L12us H8us
-    dmx_out.channels[5]   = 0b0000_0001 # Should be L4us  H4us  L28us H8us
-    dmx_out.channels[6]   = 0b1000_0011 # Should be L4us  H8us  L20us H12us
-    dmx_out.channels[7]   = 0b1100_0111 # Should be L4us  H12us L12us H16us
-    dmx_out.channels[8]   = 0b1110_1111
-    dmx_out.channels[10]  = 170
-    dmx_out.channels[12]  = 85
-    dmx_out.channels[16]  = 250
-    dmx_out.channels[17]  = 251
-    dmx_out.channels[18]  = 252
-    dmx_out.channels[19]  = 253
-    dmx_out.channels[20]  = 85
-    #dmx_out.channels[512] = 85
- 
-    #print(dmx_out)
-
-    # Something should be being sent by now - let's see if we can receive it!
-    dmx_in  = DMX_RX(7)
+    dmx_in = DMX_RX(pin=28, statemachine=1)  # DMX data should be presented to GPIO28 (Pico pin 34)
     dmx_in.start()
+    last_frame = -1
 
-    last_irq_count = dmx_in.frames_received
-    last_timer_count = dmx_out.timer_count
+    while True:
+        brightness = dmx_in.channels[dmx_start + 0]
+        red = dmx_in.channels[dmx_start + 1]
+        green = dmx_in.channels[dmx_start + 2]
+        blue = dmx_in.channels[dmx_start + 3]
+        fade = dmx_in.channels[dmx_start + 4]
+        speed = dmx_in.channels[dmx_start + 5]
 
-    dmx_test_chan = 512
+        current_frame = dmx_in.frames_received
 
-    for n in range(50):
-        dmx_out.channels[dmx_test_chan] += 1
-        print(f"Ch:{dmx_test_chan} Tx:{dmx_out.channels[dmx_test_chan]:3} Rx:{dmx_in.channels[dmx_test_chan]:3}...", end="")
-        sleep_ms(50)
+        if (current_frame != last_frame):
+            last_frame = current_frame
+            print(f"Received fader:{brightness}  R:{red} G:{green} B:{blue} B:{fade} B:{speed}")
 
-        irq_count   = dmx_in.frames_received
-        timer_count = dmx_out.timer_count
-
-        print(f"{dmx_in.channels[dmx_test_chan]:3} {dmx_out.channels[dmx_test_chan] == dmx_in.channels[dmx_test_chan]:5} IRQ {irq_count - last_irq_count} Timer {timer_count - last_timer_count}")
-        last_irq_count   = irq_count
-        last_timer_count = timer_count
-
-        sleep_ms(100)
-        
-    #for n in range(256):
-    #    dmx_out.send(1,n)
-    #    time.sleep_ms(200)
-    
-    dmx_out.pause()
